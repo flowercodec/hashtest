@@ -11,8 +11,10 @@ using namespace std;
 typedef unsigned char byte;
 #ifdef WIN32
 	typedef __int64 int64_t;
+	typedef unsigned __int64 uint64_t;
 #else
 	typedef signed long long int64_t;
+	typedef unsigned long long uint64_t;
 #endif
 
 //const char* slat = "aae8123520fa8013";
@@ -136,9 +138,9 @@ private:
 	char _text[15];
 	int _pos_map[12];
 
-	int64_t _val;
-	int64_t _start;
-	int64_t _end;
+	uint64_t _val;
+	uint64_t _start;
+	uint64_t _end;
 };
 
 class RandomText
@@ -183,13 +185,14 @@ int main()
 {
 	InitTestPassword();
 
-	//int64_t count = 0x2CC60086E3605C2D;	///< 3226266762397899821XXX 26µÄ12´Î·½
+	//uint64_t count = 0xFFFFFFFFFFFFFFFF;
 	//int startTime = GetTickCount();
 	//AlphaBetCalc alpha_calc(0, 100000000);
 	//char* text = alpha_calc.first();
 	//do {
 	//	//printf("%s\n", text);
 	//	if (TestPassword(text, 12)) {
+	//		SavePassword("password.txt", text, 12);
 	//		printf("%s Find\n", text);
 	//		break;
 	//	}
