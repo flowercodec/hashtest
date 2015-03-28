@@ -248,7 +248,7 @@ void RunHashCatRand(void* user)
 	RandomText rand_text;
 	for (int i = 0; i < 0xFFFFFFFF; i++) {
 		char* text = rand_text.next();
-		if (TestPassword2(text, 12)) {
+		if (TestPassword(text, 12)) {
 			SavePassword("password.txt", text, 12);
 			printf("%s Find\n", text);
 			break;
@@ -262,7 +262,7 @@ void RunHashCatRange(void* user)
 	AlphaBetCalc alpha_calc(range->start, range->end);
 	char* text = alpha_calc.first();
 	do {
-		if (TestPassword2(text, 12)) {
+		if (TestPassword(text, 12)) {
 			SavePassword("password.txt", text, 12);
 			printf("%s Find\n", text);
 			break;
@@ -404,7 +404,7 @@ int main(int argc, char* argv[])
 		}
 		string key = opts["--key"];
 		cerr << "run test, " << "key = " << key << endl;
-		if (TestPassword2((char*)key.c_str(), key.length())) {
+		if (TestPassword((char*)key.c_str(), key.length())) {
 			cerr << "input key good" << endl;
 		} else {
 			cerr << "input key bad" << endl;
