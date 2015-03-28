@@ -28,10 +28,10 @@ typedef unsigned char byte;
 
 using namespace std;
 
-static char* slat_text = "aae8123520fa8013";
-static char* passhash_text = "137afe87e9104665bd38a95ca3954e8d7eb6d12a";
-static byte slat[] = {0xaa, 0xe8, 0x12, 0x35, 0x20, 0xfa, 0x80, 0x13};
-static byte passhash[] = {0x13, 0x7a, 0xfe, 0x87, 0xe9, 0x10, 0x46, 0x65, 0xbd, 0x38, 0xa9, 0x5c, 0xa3, 0x95, 0x4e, 0x8d, 0x7e, 0xb6, 0xd1, 0x2a};
+static char* s_slat_text = "aae8123520fa8013";
+static char* s_passhash_text = "137afe87e9104665bd38a95ca3954e8d7eb6d12a";
+static byte s_slat[] = {0xaa, 0xe8, 0x12, 0x35, 0x20, 0xfa, 0x80, 0x13};
+static byte s_passhash[] = {0x13, 0x7a, 0xfe, 0x87, 0xe9, 0x10, 0x46, 0x65, 0xbd, 0x38, 0xa9, 0x5c, 0xa3, 0x95, 0x4e, 0x8d, 0x7e, 0xb6, 0xd1, 0x2a};
 
 const int slat_len = 8;
 const int passhash_len = 20;
@@ -44,7 +44,7 @@ void InitTestPassword()
 	int check_hash_len = strlen(checkHash);
 	SHA1_Init(&s_ctx);
 	SHA1_Update(&s_ctx, checkHash, check_hash_len);
-	SHA1_Update(&s_ctx, slat, slat_len);
+	SHA1_Update(&s_ctx, s_slat, slat_len);
 }
 
 bool TestPassword(char* text, int text_len)
@@ -53,7 +53,7 @@ bool TestPassword(char* text, int text_len)
 	SHA_CTX c = s_ctx;
 	SHA1_Update(&c, text, text_len);
 	SHA1_Final(md,&c);
-	bool ret = !memcmp(md, passhash, passhash_len);
+	bool ret = !memcmp(md, s_passhash, passhash_len);
 	return ret;
 }
 
@@ -64,17 +64,50 @@ bool TestPassword2(char* text, int text_len)
 	int check_hash_len = strlen(checkHash);
 	SHA1_Init(&c);
 	SHA1_Update(&c, checkHash, check_hash_len);
-	SHA1_Update(&c, slat, slat_len);
+	SHA1_Update(&c, s_slat, slat_len);
 
 	SHA1_Update(&c, text, text_len);
 	SHA1_Final(md,&c);
-	bool ret = !memcmp(md, passhash, passhash_len);
+	bool ret = !memcmp(md, s_passhash, passhash_len);
 	return ret;
 }
 
-void UpdataPassHashAndSlat(string& passhash, string& slat)
+static int str_to_hex(const char *string, byte *cbuf, int len)
 {
-	
+	BYTE high, low;
+	int idx, ii=0;
+	for (idx=0; idx<len; idx+=2) 
+	{
+		high = string[idx];
+		low = string[idx+1];
+
+		if(high>='0' && high<='9')
+			high = high-'0';
+		else if(high>='A' && high<='F')
+			high = high - 'A' + 10;
+		else if(high>='a' && high<='f')
+			high = high - 'a' + 10;
+		else
+			return -1;
+
+		if(low>='0' && low<='9')
+			low = low-'0';
+		else if(low>='A' && low<='F')
+			low = low - 'A' + 10;
+		else if(low>='a' && low<='f')
+			low = low - 'a' + 10;
+		else
+			return -1;
+
+		cbuf[ii++] = high<<4 | low;
+	}
+	return 0;
+}
+
+void UpdatePassHashAndSlat(string& passhash, string& slat)
+{
+	str_to_hex(passhash.c_str(), s_passhash, passhash_len);
+	str_to_hex(slat.c_str(), s_slat, slat_len);
 }
 
 void SavePassword(char* filePath, char* password, int pass_len)
@@ -241,28 +274,32 @@ void RunHashCatRange(void* user)
 //////////////////////////////////////////////////////////////////////////
 /// platform begin
 #ifdef WIN32
-
-DWORD WINAPI Win32Thread(LPVOID lpParam)
+DWORD WINAPI Win32ThreadExecute(LPVOID lpParam)
 {
 	HashThreadContext* ctx = (HashThreadContext*)lpParam;
 	ctx->thread(ctx->user);
 	return 0;
 }
-
 #else
-	
+void* pthreadExecute(void *arg)
+{
+	HashThreadContext* ctx = (HashThreadContext*)arg;
+	ctx->thread(ctx->user);
+	return 0;
+}
 #endif
 
 void CreateHashThread(HashThreadContext* thread_ctx)
 {
 #ifdef WIN32
-	CreateThread(NULL, 0, Win32Thread, (LPVOID)thread_ctx, 0, NULL);
+	CreateThread(NULL, 0, Win32ThreadExecute, (LPVOID)thread_ctx, 0, NULL);
 #else
-
+	pthread_t tid;
+	pthread_create(&tid, NULL, pthreadExecute, thread_ctx)
 #endif
 }
 
-void HashSleep(unsigned int ms)
+void NativeSleep(unsigned int ms)
 {
 #ifdef WIN32
 	Sleep(ms);
@@ -286,8 +323,8 @@ void usage()
 		<< "Params:" << endl
 		<< "\tthread : run threads, default 1" << endl
 		<< "\ttime   : run time, default 60 seconds" << endl
-		<< "\tpasshash : passhash default :" << passhash_text << endl
-		<< "\tslat : slat default : " << slat_text << endl
+		<< "\tpasshash : len 40 default:" << s_passhash_text << endl
+		<< "\tslat : len 16 default:" << s_slat_text << endl
 		<< "\tkey : test special(test action only)" << endl;
 }
 
@@ -320,7 +357,12 @@ int main(int argc, char* argv[])
 		opts.find("--slat") != opts.end()) {
 		string passhash = opts["--passhash"];
 		string slat = opts["--slat"];
-		UpdataPassHashAndSlat(passhash, slat);
+		if (passhash.length() != 40 ||
+			slat.length() != 16) {
+			usage();
+			return 1;
+		}
+		UpdatePassHashAndSlat(passhash, slat);
 	}
 
 	InitTestPassword();
@@ -335,7 +377,7 @@ int main(int argc, char* argv[])
 			ctx->user = NULL;
 			CreateHashThread(ctx);
 		}
-		HashSleep((unsigned int)1000 * time_wait);
+		NativeSleep((unsigned int)1000 * time_wait);
 		cerr << "rand time over..." << endl;
 	} else if (action == "attack") {
 		cerr << "run attack" << ", thread = " << thread_count << ", time(seconds) = " << time_wait << endl;
@@ -351,7 +393,7 @@ int main(int argc, char* argv[])
 			ctx->user = range;
 			CreateHashThread(ctx);
 		}
-		HashSleep((unsigned int)1000 * time_wait);
+		NativeSleep((unsigned int)1000 * time_wait);
 		cerr << "attack time over..." << endl;
 	} else if (action == "test") {
 		if (opts.find("--key") == opts.end()) {
