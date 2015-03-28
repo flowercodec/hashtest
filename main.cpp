@@ -106,8 +106,8 @@ static int str_to_hex(const char *string, byte *cbuf, int len)
 
 void UpdatePassHashAndSlat(string& passhash, string& slat)
 {
-	str_to_hex(passhash.c_str(), s_passhash, passhash_len);
-	str_to_hex(slat.c_str(), s_slat, slat_len);
+	str_to_hex(passhash.c_str(), s_passhash, passhash.length());
+	str_to_hex(slat.c_str(), s_slat, slat.length());
 }
 
 void SavePassword(char* filePath, char* password, int pass_len)
@@ -117,7 +117,7 @@ void SavePassword(char* filePath, char* password, int pass_len)
 	fclose(file);
 }
 
-typedef std::map<std::string, std::string> options_t;
+typedef map<string, string> options_t;
 
 void ParseOption(const string& opt, string& name, string& val)
 {
@@ -340,7 +340,7 @@ int main(int argc, char* argv[])
 	options_t opts;
 	for (int i = 2; i < argc; i++) {
 		if (argv[i][0] == '-' && argv[i][1] == '-') {
-			std::string name, val;
+			string name, val;
 			ParseOption(argv[i], name, val);
 			opts[name] = val;
 		}
@@ -348,10 +348,12 @@ int main(int argc, char* argv[])
 	int thread_count = 1;
 	int time_wait = 60;
 	if (opts.find("--thread") != opts.end()) {
-		
+		string thread = opts["--thread"];
+		sscanf(thread.c_str(), "%d", &thread_count);
 	}
 	if (opts.find("--time") != opts.end()) {
-
+		string time = opts["--time"];
+		sscanf(time.c_str(), "%d", &time_wait);
 	}
 	if (opts.find("--passhash") != opts.end() &&
 		opts.find("--slat") != opts.end()) {
@@ -381,7 +383,7 @@ int main(int argc, char* argv[])
 		cerr << "rand time over..." << endl;
 	} else if (action == "attack") {
 		cerr << "run attack" << ", thread = " << thread_count << ", time(seconds) = " << time_wait << endl;
-		uint64_t count = 0xFFFFFFFFFFFFFFFF;
+		uint64_t count = 0xFFFFFFFFFFFFFFFF;	///< FIXME not enough
 		uint64_t ev_count = count / thread_count;
 		for (int i = 0; i < thread_count; i++) {
 			///< ctx,range memory leak!
@@ -403,9 +405,9 @@ int main(int argc, char* argv[])
 		string key = opts["--key"];
 		cerr << "run test, " << "key = " << key << endl;
 		if (TestPassword2((char*)key.c_str(), key.length())) {
-			cerr << "input key valid" << endl;
+			cerr << "input key good" << endl;
 		} else {
-			cerr << "input key invalid" << endl;
+			cerr << "input key bad" << endl;
 		}
 	} else {
 		usage();
