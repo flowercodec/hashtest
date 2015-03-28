@@ -12,6 +12,7 @@
 #ifdef WIN32
 	#include <Windows.h>
 #else
+	#include <sys/time.h>
 	#include <pthread.h>
 #endif
 
@@ -27,11 +28,12 @@ typedef unsigned char byte;
 
 using namespace std;
 
-//const char* slat = "aae8123520fa8013";
-//const char* passhash = "137afe87e9104665bd38a95ca3954e8d7eb6d12a";
-const byte slat[] = {0xaa, 0xe8, 0x12, 0x35, 0x20, 0xfa, 0x80, 0x13};
+static char* slat_text = "aae8123520fa8013";
+static char* passhash_text = "137afe87e9104665bd38a95ca3954e8d7eb6d12a";
+static byte slat[] = {0xaa, 0xe8, 0x12, 0x35, 0x20, 0xfa, 0x80, 0x13};
+static byte passhash[] = {0x13, 0x7a, 0xfe, 0x87, 0xe9, 0x10, 0x46, 0x65, 0xbd, 0x38, 0xa9, 0x5c, 0xa3, 0x95, 0x4e, 0x8d, 0x7e, 0xb6, 0xd1, 0x2a};
+
 const int slat_len = 8;
-const byte passhash[] = {0x13, 0x7a, 0xfe, 0x87, 0xe9, 0x10, 0x46, 0x65, 0xbd, 0x38, 0xa9, 0x5c, 0xa3, 0x95, 0x4e, 0x8d, 0x7e, 0xb6, 0xd1, 0x2a};
 const int passhash_len = 20;
 const char* checkHash = "PasswordCheckHash";
 
@@ -70,11 +72,30 @@ bool TestPassword2(char* text, int text_len)
 	return ret;
 }
 
+void UpdataPassHashAndSlat(string& passhash, string& slat)
+{
+	
+}
+
 void SavePassword(char* filePath, char* password, int pass_len)
 {
 	FILE* file = fopen(filePath, "wb+");
 	fwrite(password, pass_len, 1, file);
 	fclose(file);
+}
+
+typedef std::map<std::string, std::string> options_t;
+
+void ParseOption(const string& opt, string& name, string& val)
+{
+	int pos = opt.find_first_of('=');
+	if (pos == -1) {
+		name = opt;
+		val.clear();
+	} else {
+		name = opt.substr(0, pos);
+		val = opt.substr(pos+1);
+	}	
 }
 
 #define alphabet_len 62
@@ -174,23 +195,22 @@ private:
 	char _text[15];
 };
 
-typedef std::map<std::string, std::string> options_t;
+//////////////////////////////////////////////////////////////////////////
+typedef void(*HashThreadType)(void* user);
 
-void ParseOption(const string& opt, string& name, string& val)
+struct HashThreadContext
 {
-	int pos = opt.find_first_of('=');
-	if (pos == -1) {
-		name = opt;
-		val.clear();
-	} else {
-		name = opt.substr(0, pos);
-		val = opt.substr(pos+1);
-	}	
-}
+	HashThreadType thread;
+	void* user;
+};
 
-#ifdef WIN32
+struct HashRange
+{
+	uint64_t start;
+	uint64_t end;
+};
 
-DWORD WINAPI RunHashCatRand(LPVOID lpParam)
+void RunHashCatRand(void* user)
 {
 	RandomText rand_text;
 	for (int i = 0; i < 0xFFFFFFFF; i++) {
@@ -201,40 +221,78 @@ DWORD WINAPI RunHashCatRand(LPVOID lpParam)
 			break;
 		}
 	}
+}
+
+void RunHashCatRange(void* user)
+{
+	HashRange* range = (HashRange*)user;
+	AlphaBetCalc alpha_calc(range->start, range->end);
+	char* text = alpha_calc.first();
+	do {
+		if (TestPassword2(text, 12)) {
+			SavePassword("password.txt", text, 12);
+			printf("%s Find\n", text);
+			break;
+		}
+		text = alpha_calc.next();
+	} while (text);
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// platform begin
+#ifdef WIN32
+
+DWORD WINAPI Win32Thread(LPVOID lpParam)
+{
+	HashThreadContext* ctx = (HashThreadContext*)lpParam;
+	ctx->thread(ctx->user);
 	return 0;
 }
 
+#else
+	
 #endif
 
-typedef void(*HashThreadType)(void* user);
-
-void HashThread(void* user)
+void CreateHashThread(HashThreadContext* thread_ctx)
 {
+#ifdef WIN32
+	CreateThread(NULL, 0, Win32Thread, (LPVOID)thread_ctx, 0, NULL);
+#else
 
+#endif
 }
 
-void CreateHashThread(HashThreadType callback, void* user)
+void HashSleep(unsigned int ms)
 {
-
+#ifdef WIN32
+	Sleep(ms);
+#else
+	struct timespec ts = { ms / 1000, (ms % 1000) * 1000 * 1000 };
+	nanosleep(&ts, NULL);
+#endif
 }
+
+/// platform end
+//////////////////////////////////////////////////////////////////////////
+
 
 void usage()
 {
 	cerr << "hashtest version 1.2" << endl
 		<< "Usage: hashtest action .." << endl
-		<< "\trand [--thread=] [--time=]" << endl
-		<< "\tattack [--thread=] [--time=]" << endl
-		<< "\ttest --key=value" << endl
+		<< "\trand [--thread=] [--time=] [--passhash=] [--slat=]" << endl
+		<< "\tattack [--thread=] [--time=] [--passhash=] [--slat=]" << endl
+		<< "\ttest --key=value [--passhash=] [--slat=]" << endl
 		<< "Params:" << endl
-		<< "\t thread : run threads, default 1" << endl
-		<< "\t time   : run time, default 60 seconds" << endl
-		<< "\t key	  : test special(test action only)" << endl;
+		<< "\tthread : run threads, default 1" << endl
+		<< "\ttime   : run time, default 60 seconds" << endl
+		<< "\tpasshash : passhash default :" << passhash_text << endl
+		<< "\tslat : slat default : " << slat_text << endl
+		<< "\tkey : test special(test action only)" << endl;
 }
 
 int main(int argc, char* argv[])
 {
-	InitTestPassword();
-
 	if (argc < 2) {
 		usage();
 		return 1;
@@ -251,40 +309,50 @@ int main(int argc, char* argv[])
 		}
 	}
 	int thread_count = 1;
-	int time_wait = 60 * 1000;
+	int time_wait = 60;
 	if (opts.find("--thread") != opts.end()) {
 		
 	}
 	if (opts.find("--time") != opts.end()) {
 
 	}
+	if (opts.find("--passhash") != opts.end() &&
+		opts.find("--slat") != opts.end()) {
+		string passhash = opts["--passhash"];
+		string slat = opts["--slat"];
+		UpdataPassHashAndSlat(passhash, slat);
+	}
+
+	InitTestPassword();
 
 	// do action
 	if (action == "rand") {
-		cerr << "run random" << endl;
+		cerr << "run random" << ", thread = " << thread_count << ", time(seconds) = " << time_wait << endl;
 		for (int i = 0; i < thread_count; i++) {
-			CreateThread(NULL, 0, RunHashCatRand, (LPVOID)NULL, 0, NULL);
+			///< ctx memory leak!
+			HashThreadContext* ctx = new HashThreadContext;
+			ctx->thread = RunHashCatRand;
+			ctx->user = NULL;
+			CreateHashThread(ctx);
 		}
-		Sleep(time_wait);
+		HashSleep((unsigned int)1000 * time_wait);
 		cerr << "rand time over..." << endl;
 	} else if (action == "attack") {
-		cerr << "run attack" << endl;
-		//uint64_t count = 0xFFFFFFFFFFFFFFFF;
-		//int startTime = GetTickCount();
-		//AlphaBetCalc alpha_calc(0, 100000000);
-		//char* text = alpha_calc.first();
-		//do {
-		//	//printf("%s\n", text);
-		//	if (TestPassword2(text, 12)) {
-		//		SavePassword("password.txt", text, 12);
-		//		printf("%s Find\n", text);
-		//		break;
-		//	}
-		//	text = alpha_calc.next();
-		//} while (text);
-		//int endTime = GetTickCount() - startTime;
-		//printf("%d ms\n", endTime);
-		//system("pause");	
+		cerr << "run attack" << ", thread = " << thread_count << ", time(seconds) = " << time_wait << endl;
+		uint64_t count = 0xFFFFFFFFFFFFFFFF;
+		uint64_t ev_count = count / thread_count;
+		for (int i = 0; i < thread_count; i++) {
+			///< ctx,range memory leak!
+			HashThreadContext* ctx = new HashThreadContext;
+			HashRange* range = new HashRange;
+			range->start = ev_count * i;
+			range->end   = ev_count * (i + 1);
+			ctx->thread = RunHashCatRange;
+			ctx->user = range;
+			CreateHashThread(ctx);
+		}
+		HashSleep((unsigned int)1000 * time_wait);
+		cerr << "attack time over..." << endl;
 	} else if (action == "test") {
 		if (opts.find("--key") == opts.end()) {
 			usage();
