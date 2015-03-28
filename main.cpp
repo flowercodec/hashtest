@@ -2,13 +2,21 @@
 #include <string>
 #include <time.h>
 #include <assert.h>
-
-using namespace std;
+#include <iostream>
+#include <map>
 #include <openssl/sha.h>
+
 #pragma comment(lib, "libeay32.lib")
 #pragma comment(lib, "ssleay32.lib")
 
+#ifdef WIN32
+	#include <Windows.h>
+#else
+	#include <pthread.h>
+#endif
+
 typedef unsigned char byte;
+
 #ifdef WIN32
 	typedef __int64 int64_t;
 	typedef unsigned __int64 uint64_t;
@@ -16,6 +24,8 @@ typedef unsigned char byte;
 	typedef signed long long int64_t;
 	typedef unsigned long long uint64_t;
 #endif
+
+using namespace std;
 
 //const char* slat = "aae8123520fa8013";
 //const char* passhash = "137afe87e9104665bd38a95ca3954e8d7eb6d12a";
@@ -164,15 +174,28 @@ private:
 	char _text[15];
 };
 
-#include <Windows.h>
+typedef std::map<std::string, std::string> options_t;
+
+void ParseOption(const string& opt, string& name, string& val)
+{
+	int pos = opt.find_first_of('=');
+	if (pos == -1) {
+		name = opt;
+		val.clear();
+	} else {
+		name = opt.substr(0, pos);
+		val = opt.substr(pos+1);
+	}	
+}
+
+#ifdef WIN32
 
 DWORD WINAPI RunHashCatRand(LPVOID lpParam)
 {
 	RandomText rand_text;
 	for (int i = 0; i < 0xFFFFFFFF; i++) {
 		char* text = rand_text.next();
-		//printf("%s\n", text);
-		if (TestPassword(text, 12)) {
+		if (TestPassword2(text, 12)) {
 			SavePassword("password.txt", text, 12);
 			printf("%s Find\n", text);
 			break;
@@ -181,33 +204,103 @@ DWORD WINAPI RunHashCatRand(LPVOID lpParam)
 	return 0;
 }
 
-int main()
+#endif
+
+typedef void(*HashThreadType)(void* user);
+
+void HashThread(void* user)
+{
+
+}
+
+void CreateHashThread(HashThreadType callback, void* user)
+{
+
+}
+
+void usage()
+{
+	cerr << "hashtest version 1.2" << endl
+		<< "Usage: hashtest action .." << endl
+		<< "\trand [--thread=] [--time=]" << endl
+		<< "\tattack [--thread=] [--time=]" << endl
+		<< "\ttest --key=value" << endl
+		<< "Params:" << endl
+		<< "\t thread : run threads, default 1" << endl
+		<< "\t time   : run time, default 60 seconds" << endl
+		<< "\t key	  : test special(test action only)" << endl;
+}
+
+int main(int argc, char* argv[])
 {
 	InitTestPassword();
 
-	//uint64_t count = 0xFFFFFFFFFFFFFFFF;
-	//int startTime = GetTickCount();
-	//AlphaBetCalc alpha_calc(0, 100000000);
-	//char* text = alpha_calc.first();
-	//do {
-	//	//printf("%s\n", text);
-	//	if (TestPassword(text, 12)) {
-	//		SavePassword("password.txt", text, 12);
-	//		printf("%s Find\n", text);
-	//		break;
-	//	}
-	//	text = alpha_calc.next();
-	//} while (text);
-	//int endTime = GetTickCount() - startTime;
-	//printf("%d ms\n", endTime);
-	//system("pause");
-
-	for (int i = 0; i < 7; i++) {
-		CreateThread(NULL, 0, RunHashCatRand, (LPVOID)NULL, 0, NULL);
+	if (argc < 2) {
+		usage();
+		return 1;
 	}
-	
-	Sleep(60 * 1000);
-	printf("not found...");
+
+	// parse command line
+	string action = argv[1];
+	options_t opts;
+	for (int i = 2; i < argc; i++) {
+		if (argv[i][0] == '-' && argv[i][1] == '-') {
+			std::string name, val;
+			ParseOption(argv[i], name, val);
+			opts[name] = val;
+		}
+	}
+	int thread_count = 1;
+	int time_wait = 60 * 1000;
+	if (opts.find("--thread") != opts.end()) {
+		
+	}
+	if (opts.find("--time") != opts.end()) {
+
+	}
+
+	// do action
+	if (action == "rand") {
+		cerr << "run random" << endl;
+		for (int i = 0; i < thread_count; i++) {
+			CreateThread(NULL, 0, RunHashCatRand, (LPVOID)NULL, 0, NULL);
+		}
+		Sleep(time_wait);
+		cerr << "rand time over..." << endl;
+	} else if (action == "attack") {
+		cerr << "run attack" << endl;
+		//uint64_t count = 0xFFFFFFFFFFFFFFFF;
+		//int startTime = GetTickCount();
+		//AlphaBetCalc alpha_calc(0, 100000000);
+		//char* text = alpha_calc.first();
+		//do {
+		//	//printf("%s\n", text);
+		//	if (TestPassword2(text, 12)) {
+		//		SavePassword("password.txt", text, 12);
+		//		printf("%s Find\n", text);
+		//		break;
+		//	}
+		//	text = alpha_calc.next();
+		//} while (text);
+		//int endTime = GetTickCount() - startTime;
+		//printf("%d ms\n", endTime);
+		//system("pause");	
+	} else if (action == "test") {
+		if (opts.find("--key") == opts.end()) {
+			usage();
+			return 1;
+		}
+		string key = opts["--key"];
+		cerr << "run test, " << "key = " << key << endl;
+		if (TestPassword2((char*)key.c_str(), key.length())) {
+			cerr << "input key valid" << endl;
+		} else {
+			cerr << "input key invalid" << endl;
+		}
+	} else {
+		usage();
+		return 1;
+	}
 	system("pause");
 	return 0;
 }
